@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>华中营收周报</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        h1 { text-align: center; color: #1a1a1a; margin-bottom: 6px; font-size: 24px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 20px; font-size: 14px; }
+        .upload-area {
+            background: white;
+            border: 2px dashed #d9d9d9;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 24px;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover { border-color: #1890ff; }
+        .upload-area.dragover { border-color: #1890ff; background: #e6f7ff; }
+        .upload-area p { font-size: 16px; color: #666; margin-bottom: 8px; }
+        .upload-area .hint { font-size: 12px; color: #999; }
+        .upload-area input { display: none; }
+        .config-row {
+            display: flex; gap: 12px; align-items: center; justify-content: center;
+            margin-bottom: 20px; flex-wrap: wrap;
+        }
+        .config-row label { font-size: 13px; color: #555; }
+        .config-row select, .config-row input[type="text"] {
+            padding: 6px 10px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 13px;
+        }
+        .btn {
+            padding: 8px 20px; background: #1890ff; color: white; border: none;
+            border-radius: 4px; cursor: pointer; font-size: 14px;
+        }
+        .btn:hover { background: #40a9ff; }
+        .btn:disabled { background: #d9d9d9; cursor: not-allowed; }
+        .city-section {
+            background: white; border-radius: 8px; padding: 16px 20px;
+            margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        th {
+            background: #fafafa; padding: 8px 10px; border: 1px solid #e8e8e8;
+            text-align: center; font-weight: bold; color: #333;
+        }
+        td { padding: 6px 10px; border: 1px solid #e8e8e8; text-align: right; }
+        td:first-child { text-align: left; }
+        tr:hover { background: #fafbfc; }
+        .positive { color: #00a854; }
+        .negative { color: #f5222d; }
+        .bold-row td { font-weight: bold; }
+        .city-name { color: #00a854; font-weight: bold; }
+        .indent { padding-left: 24px !important; }
+        #report { display: none; }
+        .info-bar {
+            text-align: center; color: #888; font-size: 13px; margin-bottom: 16px;
+        }
+        /* Summary table styles */
+        .summary-section {
+            background: white; border-radius: 8px; padding: 16px 20px;
+            margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        }
+        .summary-section h3 {
+            font-size: 14px; color: #555; margin-bottom: 12px;
+        }
+        .summary-table th { background: #f5f5f5; }
+        .summary-table td { text-align: right; }
+        .summary-table td:first-child { text-align: left; font-weight: bold; }
+        .summary-table .city-label { color: #00a854; }
+        .summary-table .total-row td { font-weight: bold; background: #fafafa; }
+        .target-input {
+            width: 100px; padding: 4px 8px; border: 1px solid #d9d9d9; border-radius: 3px;
+            text-align: right; font-size: 13px; font-family: inherit;
+        }
+        .target-input:focus { border-color: #1890ff; outline: none; box-shadow: 0 0 0 2px rgba(24,144,255,0.1); }
+        .bar-cell { position: relative; padding: 0 !important; }
+        .bar-bg { height: 28px; display: flex; align-items: center; justify-content: center; position: relative; }
+        .bar-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 2px; }
+        .bar-fill.green { background: rgba(82, 196, 26, 0.4); }
+        .bar-fill.orange { background: rgba(250, 173, 20, 0.4); }
+        .bar-fill.red { background: rgba(245, 34, 45, 0.3); }
+        .bar-text { position: relative; z-index: 1; font-size: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>华中营收周报</h1>
+    <div class="subtitle">上传「华中营收周报.xlsx」自动生成报表</div>
+
+    <div class="upload-area" id="uploadArea">
+        <p>📂 点击或拖拽上传 Excel 文件</p>
+        <div class="hint">支持 .xlsx 格式（华中营收周报数据文件）</div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+
+    <div class="config-row">
+        <label>当前周：</label>
+        <select id="weekSelect">
+            <option value="W21">W21 (5.16-5.22)</option>
+            <option value="W22">W22 (5.23-5.29)</option>
+            <option value="W23">W23 (5.30-5.31)</option>
+        </select>
+        <label>月份天数：</label>
+        <input type="text" id="monthDays" value="31" style="width:50px;">
+        <button class="btn" id="generateBtn" disabled>生成报表</button>
+    </div>
+
+    <!-- Editable target summary table -->
+    <div class="summary-section" id="targetSection">
+        <h3>📋 5月目标设置（可直接编辑目标值）</h3>
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th style="text-align:left;width:80px;"></th>
+                    <th>5月目标</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="city-label">华中总计</td>
+                    <td><input type="text" class="target-input" id="target_total" value="2,360,000"></td>
+                </tr>
+                <tr>
+                    <td class="city-label">武汉</td>
+                    <td><input type="text" class="target-input" id="target_wuhan" value="1,000,000"></td>
+                </tr>
+                <tr>
+                    <td class="city-label">天津</td>
+                    <td><input type="text" class="target-input" id="target_tianjin" value="320,000"></td>
+                </tr>
+                <tr>
+                    <td class="city-label">郑州</td>
+                    <td><input type="text" class="target-input" id="target_zhengzhou" value="620,000"></td>
+                </tr>
+                <tr>
+                    <td class="city-label">合肥</td>
+                    <td><input type="text" class="target-input" id="target_hefei" value="420,000"></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div id="report">
+        <!-- Summary overview table -->
+        <div class="summary-section" id="summaryTable"></div>
+        <div class="info-bar" id="infoBar"></div>
+        <div id="reportContent"></div>
+    </div>
+</div>
+
+<script>
+// Week definitions (day of May)
+const WEEKS = {
+    'W19': { label: 'W19', sub: '5.2-5.8', start: 2, end: 8 },
+    'W20': { label: 'W20', sub: '5.9-5.15', start: 9, end: 15 },
+    'W21': { label: 'W21', sub: '5.16-5.22', start: 16, end: 22 },
+    'W22': { label: 'W22', sub: '5.23-5.29', start: 23, end: 29 },
+    'W23': { label: 'W23', sub: '5.30-5.31', start: 30, end: 31 },
+};
+
+// Detail channel targets (for per-city detail tables)
+const DETAIL_TARGETS = {
+    '武汉': { '总计': 1081164, '站点': 643243, '门店': 45507, '美团': 217814, '抖音': 57895, '新媒体': 21600, '私域': 113000, '渠道拓展': 40000 },
+    '合肥': { '总计': 405277, '站点': 190444, '门店': 0, '美团': 82169, '抖音': 16644, '新媒体': 71700, '私域': 59869, '渠道拓展': 1095 },
+    '天津': { '总计': 434070, '站点': 182177, '门店': 60000, '美团': 150933, '抖音': 95953, '新媒体': 7470, '私域': 22990, '渠道拓展': 10500 },
+    '郑州': { '总计': 697824, '站点': 325491, '门店': 206540, '美团': 165793, '抖音': 138382, '新媒体': 0, '私域': 0, '渠道拓展': 0 },
+};
+
+const EXCEL_BASE = new Date(1899, 11, 30);
+function serialToDate(serial) {
+    return new Date(EXCEL_BASE.getTime() + serial * 86400000);
+}
+function getDayOfMay(serial) {
+    const d = serialToDate(serial);
+    if (d.getMonth() === 4 && d.getFullYear() === 2026) return d.getDate();
+    return -1;
+}
+
+function parseTargetInput(id) {
+    const val = document.getElementById(id).value.replace(/,/g, '').trim();
+    return parseFloat(val) || 0;
+}
+
+let parsedData = null;
+
+// Upload handling
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const generateBtn = document.getElementById('generateBtn');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('dragover'); });
+uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('dragover'));
+uploadArea.addEventListener('drop', e => {
+    e.preventDefault(); uploadArea.classList.remove('dragover');
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const ws = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        parsedData = rows;
+        uploadArea.innerHTML = `<p>✅ 已加载：${file.name}</p><div class="hint">${rows.length} 行数据</div>`;
+        generateBtn.disabled = false;
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+generateBtn.addEventListener('click', generateReport);
+
+function safeNum(val) {
+    if (val === null || val === undefined || val === '-' || val === '') return 0;
+    if (typeof val === 'string') {
+        const n = parseFloat(val);
+        return isNaN(n) ? 0 : n;
+    }
+    return Number(val) || 0;
+}
+
+function getCityData(row, city) {
+    const r = {};
+    if (city === '武汉') {
+        r['站点'] = safeNum(row[1]) + safeNum(row[5]) + safeNum(row[7]);
+        r['门店'] = safeNum(row[10]) + safeNum(row[14]) + safeNum(row[16]);
+        r['渠道拓展'] = safeNum(row[18]);
+        r['美团'] = safeNum(row[21]) + safeNum(row[25]) + safeNum(row[29]);
+        r['抖音'] = safeNum(row[31]);
+        r['新媒体'] = safeNum(row[35]) + safeNum(row[39]);
+        r['私域'] = safeNum(row[43]) + safeNum(row[47]) + safeNum(row[49]);
+    } else if (city === '合肥') {
+        r['站点'] = safeNum(row[2]) + safeNum(row[6]) + safeNum(row[8]);
+        r['门店'] = safeNum(row[11]) + safeNum(row[15]) + safeNum(row[17]);
+        r['渠道拓展'] = safeNum(row[19]);
+        r['美团'] = safeNum(row[22]) + safeNum(row[26]) + safeNum(row[30]);
+        r['抖音'] = safeNum(row[32]);
+        r['新媒体'] = safeNum(row[36]) + safeNum(row[40]);
+        r['私域'] = safeNum(row[44]) + safeNum(row[48]) + safeNum(row[50]);
+    } else if (city === '天津') {
+        r['站点'] = safeNum(row[3]) + safeNum(row[9]);
+        r['门店'] = safeNum(row[12]);
+        r['渠道拓展'] = safeNum(row[20]);
+        r['美团'] = safeNum(row[23]) + safeNum(row[27]);
+        r['抖音'] = safeNum(row[33]);
+        r['新媒体'] = safeNum(row[37]) + safeNum(row[41]);
+        r['私域'] = safeNum(row[45]);
+    } else if (city === '郑州') {
+        r['站点'] = safeNum(row[4]);
+        r['门店'] = safeNum(row[13]);
+        r['渠道拓展'] = 0;
+        r['美团'] = safeNum(row[24]) + safeNum(row[28]);
+        r['抖音'] = safeNum(row[34]);
+        r['新媒体'] = safeNum(row[38]) + safeNum(row[42]);
+        r['私域'] = safeNum(row[46]);
+    }
+    r['线下'] = r['站点'] + r['门店'];
+    r['线上'] = r['美团'] + r['抖音'] + r['新媒体'];
+    r['总计'] = r['线下'] + r['线上'] + r['私域'] + r['渠道拓展'];
+    return r;
+}
+
+function sumPeriod(rows, startDay, endDay, city) {
+    const totals = { '站点': 0, '门店': 0, '渠道拓展': 0, '美团': 0, '抖音': 0, '新媒体': 0, '私域': 0 };
+    for (const row of rows) {
+        const serial = row[0];
+        if (typeof serial !== 'number') continue;
+        const day = getDayOfMay(serial);
+        if (day >= startDay && day <= endDay) {
+            const d = getCityData(row, city);
+            for (const k of Object.keys(totals)) totals[k] += d[k];
+        }
+    }
+    totals['线下'] = totals['站点'] + totals['门店'];
+    totals['线上'] = totals['美团'] + totals['抖音'] + totals['新媒体'];
+    totals['总计'] = totals['线下'] + totals['线上'] + totals['私域'] + totals['渠道拓展'];
+    return totals;
+}
+
+function fmtNum(val) { return Math.round(val).toLocaleString('zh-CN'); }
+
+function generateReport() {
+    if (!parsedData) return;
+    const currentWeek = document.getElementById('weekSelect').value;
+    const monthDays = parseInt(document.getElementById('monthDays').value) || 31;
+
+    const weekDef = WEEKS[currentWeek];
+    const weekKeys = Object.keys(WEEKS);
+    const curIdx = weekKeys.indexOf(currentWeek);
+    const prevWeek = curIdx > 0 ? WEEKS[weekKeys[curIdx - 1]] : null;
+    const prevPrevWeek = curIdx > 1 ? WEEKS[weekKeys[curIdx - 2]] : null;
+
+    const mtdEnd = weekDef.end;
+    const timePct = Math.round(mtdEnd / monthDays * 100);
+
+    const dataRows = parsedData.slice(3);
+
+    // Read user-defined targets
+    const summaryTargets = {
+        '华中总计': parseTargetInput('target_total'),
+        '武汉': parseTargetInput('target_wuhan'),
+        '天津': parseTargetInput('target_tianjin'),
+        '郑州': parseTargetInput('target_zhengzhou'),
+        '合肥': parseTargetInput('target_hefei'),
+    };
+
+    const cities = ['武汉', '合肥', '天津', '郑州'];
+    const cityMTD = {};
+    const cityW20 = {};
+    const cityW21 = {};
+
+    for (const city of cities) {
+        cityMTD[city] = sumPeriod(dataRows, 1, mtdEnd, city);
+        cityW20[city] = prevWeek ? sumPeriod(dataRows, prevWeek.start, prevWeek.end, city) : { '总计': 0 };
+        cityW21[city] = sumPeriod(dataRows, weekDef.start, weekDef.end, city);
+    }
+
+    // Generate summary table
+    const totalMTD = cities.reduce((s, c) => s + cityMTD[c]['总计'], 0);
+    const totalW20 = cities.reduce((s, c) => s + cityW20[c]['总计'], 0);
+    const totalW21 = cities.reduce((s, c) => s + cityW21[c]['总计'], 0);
+
+    function makeBarHtml(mtdVal, target) {
+        if (!target) return `<td>${fmtNum(mtdVal)}</td>`;
+        const pct = Math.min((mtdVal / target) * 100, 100);
+        const pctStr = (mtdVal / target * 100).toFixed(1) + '%';
+        let colorClass = 'green';
+        if (pct < 50) colorClass = 'red';
+        else if (pct < 70) colorClass = 'orange';
+        return `<td class="bar-cell"><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width:${pct}%"></div><span class="bar-text">${fmtNum(mtdVal)}</span></div></td>`;
+    }
+
+    function makeAchieveBar(mtdVal, target) {
+        if (!target) return '<td>-</td>';
+        const pct = (mtdVal / target * 100).toFixed(1);
+        const pctNum = parseFloat(pct);
+        let colorClass = 'green';
+        if (pctNum < 50) colorClass = 'red';
+        else if (pctNum < 70) colorClass = 'orange';
+        const barW = Math.min(pctNum, 100);
+        return `<td class="bar-cell"><div class="bar-bg"><div class="bar-fill ${colorClass}" style="width:${barW}%"></div><span class="bar-text">${pct}%</span></div></td>`;
+    }
+
+    function summaryRow(label, target, mtdVal, w20Val, w21Val, isTotal) {
+        const wow = w21Val - w20Val;
+        const wowPct = w20Val !== 0 ? ((w21Val - w20Val) / w20Val * 100).toFixed(0) + '%' : '-';
+        const wowClass = wow > 0 ? 'positive' : wow < 0 ? 'negative' : '';
+        const wowStr = wow > 0 ? '+' + fmtNum(wow) : fmtNum(wow);
+        const wowPctStr = wow > 0 ? '+' + wowPct : wowPct;
+        const rowClass = isTotal ? 'total-row' : '';
+        return `<tr class="${rowClass}">
+            <td class="city-label">${label}</td>
+            <td>${fmtNum(target)}</td>
+            ${makeBarHtml(mtdVal, target)}
+            ${makeAchieveBar(mtdVal, target)}
+            <td>${fmtNum(w20Val)}</td>
+            <td>${fmtNum(w21Val)}</td>
+            <td class="${wowClass}">${wowStr}</td>
+            <td class="${wowClass}">${wowPctStr}</td>
+        </tr>`;
+    }
+
+    const prevLabel = prevWeek ? prevWeek.label : '-';
+    const curLabel = weekDef.label;
+
+    let summaryHtml = `<table class="summary-table">
+        <thead><tr>
+            <th style="text-align:left;">时间：${timePct}%</th>
+            <th>5月目标</th>
+            <th>5月MTD</th>
+            <th>5月达成率</th>
+            <th>${prevLabel}</th>
+            <th>${curLabel}</th>
+            <th>本周增量</th>
+            <th>环比上周</th>
+        </tr></thead><tbody>`;
+
+    summaryHtml += summaryRow('华中总计', summaryTargets['华中总计'], totalMTD, totalW20, totalW21, true);
+    summaryHtml += summaryRow('武汉', summaryTargets['武汉'], cityMTD['武汉']['总计'], cityW20['武汉']['总计'], cityW21['武汉']['总计'], false);
+    summaryHtml += summaryRow('天津', summaryTargets['天津'], cityMTD['天津']['总计'], cityW20['天津']['总计'], cityW21['天津']['总计'], false);
+    summaryHtml += summaryRow('郑州', summaryTargets['郑州'], cityMTD['郑州']['总计'], cityW20['郑州']['总计'], cityW21['郑州']['总计'], false);
+    summaryHtml += summaryRow('合肥', summaryTargets['合肥'], cityMTD['合肥']['总计'], cityW20['合肥']['总计'], cityW21['合肥']['总计'], false);
+
+    summaryHtml += '</tbody></table>';
+    document.getElementById('summaryTable').innerHTML = summaryHtml;
+
+    // Generate detail tables per city
+    let html = '';
+    for (const city of cities) {
+        const mtd = cityMTD[city];
+        const wCur = cityW21[city];
+        const wPrev = cityW20[city];
+        const wPrevPrev = prevPrevWeek ? sumPeriod(dataRows, prevPrevWeek.start, prevPrevWeek.end, city) : null;
+
+        const target = DETAIL_TARGETS[city];
+        const channels = [
+            { key: '总计', label: city, bold: true, isCity: true, tgt: target['总计'] },
+            { key: '线下', label: '线下', bold: true, tgt: target['站点'] + target['门店'] },
+            { key: '站点', label: '站点', indent: true, tgt: target['站点'] },
+            { key: '门店', label: '门店', indent: true, tgt: target['门店'] },
+            { key: '线上', label: '线上', bold: true, tgt: target['美团'] + target['抖音'] + target['新媒体'] },
+            { key: '抖音', label: '抖音', indent: true, tgt: target['抖音'] },
+            { key: '美团', label: '美团', indent: true, tgt: target['美团'] },
+            { key: '新媒体', label: '新媒体', indent: true, tgt: target['新媒体'] },
+        ];
+        if (target['渠道拓展'] > 0) channels.push({ key: '渠道拓展', label: '渠道拓展', tgt: target['渠道拓展'] });
+        if (target['私域'] > 0) channels.push({ key: '私域', label: '私域', tgt: target['私域'] });
+
+        let tableRows = '';
+        for (const ch of channels) {
+            const mtdVal = mtd[ch.key];
+            const curVal = wCur[ch.key];
+            const prevVal = wPrev[ch.key] || 0;
+            const prevPrevVal = wPrevPrev ? (wPrevPrev[ch.key] || 0) : 0;
+
+            const wow = curVal - prevVal;
+            const wowPct = prevVal !== 0 ? (curVal - prevVal) / prevVal : null;
+            const achievePct = ch.tgt > 0 ? (mtdVal / ch.tgt * 100).toFixed(1) + '%' : '';
+
+            const wowClass = wow > 0 ? 'positive' : wow < 0 ? 'negative' : '';
+            const wowStr = wow > 0 ? '+' + fmtNum(wow) : fmtNum(wow);
+            const wowPctStr = wowPct !== null ? (wowPct > 0 ? '+' : '') + (wowPct * 100).toFixed(1) + '%' : '-';
+            const arrow = wow > 0 ? '↑' : wow < 0 ? '↓' : '→';
+
+            const rowClass = ch.bold ? 'bold-row' : '';
+            const labelHtml = ch.isCity ? `<span class="city-name">${ch.label}</span>` : ch.label;
+            const tdClass = ch.indent ? 'indent' : '';
+
+            tableRows += `<tr class="${rowClass}">
+                <td class="${tdClass}">${labelHtml}</td>
+                <td>${fmtNum(mtdVal)}</td>
+                <td>${achievePct}</td>
+                <td>${wPrevPrev ? fmtNum(prevPrevVal) : '-'}</td>
+                <td>${fmtNum(prevVal)}</td>
+                <td>${fmtNum(curVal)}</td>
+                <td class="${wowClass}">${wowStr}</td>
+                <td class="${wowClass}">${wowPctStr}</td>
+                <td class="${wowClass}" style="text-align:center;font-size:15px;">${arrow}</td>
+            </tr>`;
+        }
+
+        const col3 = prevPrevWeek ? `${prevPrevWeek.label}<br><span style="font-weight:normal;font-size:11px;">${prevPrevWeek.sub}</span>` : '-';
+        const col4 = prevWeek ? `${prevWeek.label}<br><span style="font-weight:normal;font-size:11px;">${prevWeek.sub}</span>` : '-';
+        const col5 = `${weekDef.label}<br><span style="font-weight:normal;font-size:11px;">${weekDef.sub}</span>`;
+
+        html += `<div class="city-section"><table>
+            <thead><tr>
+                <th style="text-align:left;min-width:80px;"></th>
+                <th>5月MTD</th>
+                <th>5月达成率</th>
+                <th>${col3}</th>
+                <th>${col4}</th>
+                <th>${col5}</th>
+                <th>本周增量</th>
+                <th>环比上周</th>
+                <th>趋势</th>
+            </tr></thead>
+            <tbody>${tableRows}</tbody>
+        </table></div>`;
+    }
+
+    document.getElementById('infoBar').textContent = `时间进度：${timePct}%（截止5月${mtdEnd}日）`;
+    document.getElementById('reportContent').innerHTML = html;
+    document.getElementById('report').style.display = 'block';
+}
+</script>
+</body>
+</html>
